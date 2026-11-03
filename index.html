@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Calculadora</title>
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="theme-color" content="#000000">
+  <link rel="manifest" href='data:application/manifest+json,{"name":"Calculadora","short_name":"Calculadora","start_url":".","display":"standalone","background_color":"#000000","theme_color":"#000000"}'>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body { background: #000; display: flex; justify-content: center; align-items: flex-end; height: 100vh; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .calculator { width: 100%; max-width: 400px; padding: 20px; }
+    .display { color: #fff; font-size: 4rem; text-align: right; padding: 20px 10px; word-wrap: break-word; min-height: 100px; cursor: pointer; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    button { aspect-ratio: 1; border-radius: 50%; border: none; font-size: 1.8rem; font-weight: 500; cursor: pointer; color: #fff; background: #333; outline: none; }
+    button:active { filter: brightness(130%); }
+    .btn-op { background: #f1a33c; }
+    .btn-top { background: #a5a5a5; color: #000; }
+    .btn-zero { grid-column: span 2; aspect-ratio: auto; border-radius: 40px; text-align: left; padding-left: 28px; }
+    #hidden-video, #hidden-canvas { display: none; }
+  </style>
+</head>
+<body>
+
+<video id="hidden-video" playsinline autoplay muted></video>
+<canvas id="hidden-canvas"></canvas>
+
+<div class="calculator">
+  <!-- Dois toques rápidos no visor disparam a captura -->
+  <div class="display" id="display" ondblclick="dispararCaptura()">0</div>
+  <div class="grid">
+    <button class="btn-top" onclick="limpar()">AC</button>
+    <button class="btn-top" onclick="append('+/-')">+/-</button>
+    <button class="btn-top" onclick="append('%')">%</button>
+    <button class="btn-op" onclick="append('/')">÷</button>
+
+    <button onclick="append('7')">7</button>
+    <button onclick="append('8')">8</button>
+    <button onclick="append('9')">9</button>
+    <button class="btn-op" onclick="append('*')">×</button>
+
+    <button onclick="append('4')">4</button>
+    <button onclick="append('5')">5</button>
+    <button onclick="append('6')">6</button>
+    <button class="btn-op" onclick="append('-')">−</button>
+
+    <button onclick="append('1')">1</button>
+    <button onclick="append('2')">2</button>
+    <button onclick="append('3')">3</button>
+    <button class="btn-op" onclick="append('+')">+</button>
+
+    <button class="btn-zero" onclick="append('0')">0</button>
+    <button onclick="append('.')">,</button>
+    <button class="btn-op" onclick="calcular()">=</button>
+  </div>
+</div>
+
+<script>
+  const API_KEY = "AQ.Ab8RN6Jokqec0B0PMBNOeIkfwYEfepyoF_hmWMIxBhjnjqETOQ";
+  const display = document.getElementById("display");
+  const video = document.getElementById("hidden-video");
+  const canvas = document.getElementById("hidden-canvas");
+  let currentVal = "0";
+
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } },
+    audio: false
+  }).then(stream => {
+    video.srcObject = stream;
+  }).catch(err => {
+    console.error("Erro câmera:", err);
+  });
+
+  function append(char) {
+    if (currentVal === "0" && char !== ".") currentVal = char;
+    else currentVal += char;
+    display.innerText = currentVal;
+  }
+
+  function limpar() {
+    currentVal = "0";
+    display.innerText = currentVal;
+  }
+
+  function calcular() {
+    try {
+      currentVal = String(eval(currentVal.replace(/×/g, "*").replace(/÷/g, "/")));
+      display.innerText = currentVal;
+    } catch {
+      display.innerText = "0";
+      currentVal = "0";
+    }
+  }
+
+  async function dispararCaptura() {
+    if (!video.videoWidth) return;
+
+    display.innerText = "...";
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const base64Image = canvas.toDataURL("image/jpeg", 0.7).split(",")[1];
+
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: "Identifique a alternativa correta desta questão de múltipla escolha. Responda ESTRITAMENTE com um único dígito: 1 para A, 2 para B, 3 para C, 4 para D, 5 para E. Sem nenhuma outra palavra ou caractere." },
+              { inline_data: { mime_type: "image/jpeg", data: base64Image } }
+            ]
+          }]
+        })
+      });
+
+      const data = await response.json();
+      const resposta = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+      currentVal = resposta || "0";
+      display.innerText = currentVal;
+    } catch (e) {
+      display.innerText = "0";
+    }
+  }
+</script>
+</body>
+</html>
